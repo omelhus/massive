@@ -264,12 +264,9 @@ namespace Massive {
             return Execute(CreateCommand(sql, null, args));
         }
 
-        public virtual void ValidateObjects<T>(List<T> things)
-        {
-            foreach (var item in things)
-            {
-                if (!IsValid(item))
-                {
+        public virtual void ValidateObjects<T>(List<T> things) {
+            foreach (var item in things) {
+                if (!IsValid(item)) {
                     throw new InvalidOperationException("Can't save this item: " + String.Join("; ", Errors.ToArray()));
                 }
             }
@@ -283,8 +280,7 @@ namespace Massive {
         /// <typeparam name="T"></typeparam>
         /// <param name="things"></param>
         /// <returns></returns>
-        public virtual int SaveAll<T>(List<T> things)
-        {
+        public virtual int SaveAll<T>(List<T> things) {
             ValidateObjects(things);
             var command = BuildBulkInsert(things, true);
             return Execute(command);
@@ -297,20 +293,16 @@ namespace Massive {
         /// </summary>
         /// <param name="things">List of objects</param>
         /// <returns>List of inserted IDs</returns>
-        public virtual List<int> InsertAll<T>(List<T> things)
-        {
+        public virtual List<int> InsertAll<T>(List<T> things) {
             ValidateObjects(things);
             var commands = BuildBulkInsert(things);
-            if (commands.Count == 1)
-            {
+            if (commands.Count == 1) {
                 var command = commands.First();
                 var newIds = new List<int>();
-                using (var conn = OpenConnection())
-                {
+                using (var conn = OpenConnection()) {
                     command.Connection = conn;
                     var rdr = command.ExecuteReader(CommandBehavior.KeyInfo);
-                    while (rdr.Read())
-                    {
+                    while (rdr.Read()) {
                         newIds.Add((int)rdr["ID"]);
                     }
                     return newIds;
@@ -320,13 +312,11 @@ namespace Massive {
             return new List<int> { Execute(commands) };
         }
 
-        public virtual IDictionary<string, object> ExtractFields(dynamic expando)
-        {
+        public virtual IDictionary<string, object> ExtractFields(dynamic expando) {
             return (IDictionary<string, object>)expando;
         }
 
-        public virtual List<DbCommand> BuildBulkInsert<T>(List<T> listOfThings, bool silent = false)
-        {
+        public virtual List<DbCommand> BuildBulkInsert<T>(List<T> listOfThings, bool silent = false) {
             var stub = "INSERT INTO {0} ({1}) \r\n " +
                        (!silent &&
                         !string.IsNullOrEmpty(PrimaryKeyField) ?
@@ -340,8 +330,7 @@ namespace Massive {
             var fields = ExtractFields(firstExpando);
             var sbKeys = new StringBuilder();
             var numberOfFields = 0;
-            foreach (var field in fields)
-            {
+            foreach (var field in fields) {
                 sbKeys.AppendFormat("{0},", field.Key);
                 numberOfFields++;
             }
@@ -359,12 +348,10 @@ namespace Massive {
             var values = String.Empty;
 
             var counter = 0;
-            foreach (var element in listOfThings)
-            {
+            foreach (var element in listOfThings) {
                 var sbVals = new StringBuilder();
                 var settings = ExtractFields(element.ToExpando());
-                foreach (var item in settings)
-                {
+                foreach (var item in settings) {
                     sbVals.AppendFormat("@{0},", counter);
                     result.AddParam((object)item.Value);
                     counter++;
