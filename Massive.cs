@@ -287,7 +287,7 @@ namespace Massive {
         }
 
         /// <summary>
-        /// Executes a list of objects as INSERT in one query and returns the inserted PRIMARY KEYS.
+        /// Executes a list of objects as INSERT in one query and returns the primary key for inserted objects.
         /// These objects can be POCOs, Anonymous, NameValueCollections, or Expandos.
         /// This will just INSERT, not UPDATE records.
         /// </summary>
