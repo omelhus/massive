@@ -263,6 +263,125 @@ namespace Massive {
         public virtual int Execute(string sql, params object[] args) {
             return Execute(CreateCommand(sql, null, args));
         }
+
+        public virtual void ValidateObjects<T>(List<T> things)
+        {
+            foreach (var item in things)
+            {
+                if (!IsValid(item))
+                {
+                    throw new InvalidOperationException("Can't save this item: " + String.Join("; ", Errors.ToArray()));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Executes a list of objects as INSERT in one query.
+        /// These objects can be POCOs, Anonymous, NameValueCollections, or Expandos.
+        /// This will just INSERT, not UPDATE records.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="things"></param>
+        /// <returns></returns>
+        public virtual int SaveAll<T>(List<T> things)
+        {
+            ValidateObjects(things);
+            var command = BuildBulkInsert(things, true);
+            return Execute(command);
+        }
+
+        /// <summary>
+        /// Executes a list of objects as INSERT in one query and returns the inserted PRIMARY KEYS.
+        /// These objects can be POCOs, Anonymous, NameValueCollections, or Expandos.
+        /// This will just INSERT, not UPDATE records.
+        /// </summary>
+        /// <param name="things">List of objects</param>
+        /// <returns>List of inserted IDs</returns>
+        public virtual List<int> InsertAll<T>(List<T> things)
+        {
+            ValidateObjects(things);
+            var commands = BuildBulkInsert(things);
+            if (commands.Count == 1)
+            {
+                var command = commands.First();
+                var newIds = new List<int>();
+                using (var conn = OpenConnection())
+                {
+                    command.Connection = conn;
+                    var rdr = command.ExecuteReader(CommandBehavior.KeyInfo);
+                    while (rdr.Read())
+                    {
+                        newIds.Add((int)rdr["ID"]);
+                    }
+                    return newIds;
+                }
+            }
+            // If we get to this point we're falling back with too many parameters.
+            return new List<int> { Execute(commands) };
+        }
+
+        public virtual IDictionary<string, object> ExtractFields(dynamic expando)
+        {
+            return (IDictionary<string, object>)expando;
+        }
+
+        public virtual List<DbCommand> BuildBulkInsert<T>(List<T> listOfThings, bool silent = false)
+        {
+            var stub = "INSERT INTO {0} ({1}) \r\n " +
+                       (!silent &&
+                        !string.IsNullOrEmpty(PrimaryKeyField) ?
+                            "OUTPUT inserted." + PrimaryKeyField + " AS ID " :
+                            String.Empty
+                       ) +
+                       "VALUES {2}";
+            var result = CreateCommand(stub, null);
+
+            dynamic firstExpando = listOfThings.First().ToExpando();
+            var fields = ExtractFields(firstExpando);
+            var sbKeys = new StringBuilder();
+            var numberOfFields = 0;
+            foreach (var field in fields)
+            {
+                sbKeys.AppendFormat("{0},", field.Key);
+                numberOfFields++;
+            }
+
+            const int maxNumberOfParametersInMsSql = 2098;
+
+            if (numberOfFields * listOfThings.Count > maxNumberOfParametersInMsSql)
+                if (silent)
+                    return BuildCommands(listOfThings.ToArray()); // Silently fall back to one insert per object
+                else
+                    throw new InvalidOperationException(
+                        string.Format("Too many parameters (max {0}). Use the method Save or SaveAll instead.", maxNumberOfParametersInMsSql)
+                        );
+
+            var values = String.Empty;
+
+            var counter = 0;
+            foreach (var element in listOfThings)
+            {
+                var sbVals = new StringBuilder();
+                var settings = ExtractFields(element.ToExpando());
+                foreach (var item in settings)
+                {
+                    sbVals.AppendFormat("@{0},", counter);
+                    result.AddParam((object)item.Value);
+                    counter++;
+                }
+                values += string.Format("({0}),", sbVals.ToString().Substring(0, sbVals.Length - 1));
+            }
+
+            var keys = sbKeys.ToString().Substring(0, sbKeys.Length - 1);
+            values = values.Substring(0, values.Length - 1);
+            var sql = string.Format(stub, TableName, keys, values);
+            result.CommandText = sql;
+            return new List<DbCommand>
+                       {
+                           result
+                       };
+        }
+
         /// <summary>
         /// Executes a series of DBCommands in a transaction
         /// </summary>
